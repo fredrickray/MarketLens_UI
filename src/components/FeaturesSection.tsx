@@ -41,7 +41,7 @@ const FeaturesSection = () => {
     <section id="features" className="py-20">
       <div className="container mx-auto px-4">
         <div className="mb-12 text-center">
-          <h2 className="mb-4 text-3xl font-bold">Why Choose StockSense AI?</h2>
+          <h2 className="mb-4 text-3xl font-bold">Why Choose MarketLens AI?</h2>
           <p className="mx-auto max-w-2xl text-muted-foreground">
             Leverage cutting-edge AI technology to make informed investment decisions with confidence.
           </p>

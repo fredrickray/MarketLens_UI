@@ -38,7 +38,7 @@ const Signup = () => {
           <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary">
             <TrendingUp className="h-6 w-6 text-primary-foreground" />
           </div>
-          <span className="text-2xl font-semibold tracking-tight">StockSense AI</span>
+          <span className="text-2xl font-semibold tracking-tight">MarketLens AI</span>
         </Link>
 
         <Card className="border-border/50">
