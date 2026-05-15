@@ -29,7 +29,7 @@ const Header = () => {
           <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary">
             <TrendingUp className="h-5 w-5 text-primary-foreground" />
           </div>
-          <span className="text-xl font-semibold tracking-tight">StockSense AI</span>
+          <span className="text-xl font-semibold tracking-tight">MarketLens AI</span>
         </Link>
         
         <nav className="hidden items-center gap-8 md:flex">
@@ -75,7 +75,7 @@ const Header = () => {
                   <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary">
                     <TrendingUp className="h-4 w-4 text-primary-foreground" />
                   </div>
-                  StockSense AI
+                  MarketLens AI
                 </SheetTitle>
               </SheetHeader>
               <nav className="mt-8 flex flex-col gap-4">

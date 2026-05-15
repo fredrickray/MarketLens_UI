@@ -4,7 +4,7 @@ import "../index.css";
 import { Providers } from "./providers";
 
 export const metadata: Metadata = {
-  title: "StockSense AI",
+  title: "MarketLens AI",
   description: "AI-powered stock analysis and market insights",
 };
 

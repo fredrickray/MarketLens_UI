@@ -11,7 +11,7 @@ const Footer = () => {
             <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary">
               <TrendingUp className="h-4 w-4 text-primary-foreground" />
             </div>
-            <span className="text-lg font-semibold">StockSense AI</span>
+            <span className="text-lg font-semibold">MarketLens AI</span>
           </div>
           
           <nav className="flex flex-wrap justify-center gap-6 text-sm text-muted-foreground">
@@ -23,13 +23,13 @@ const Footer = () => {
           </nav>
           
           <p className="text-sm text-muted-foreground">
-            © 2024 StockSense AI. All rights reserved.
+            © 2024 MarketLens AI. All rights reserved.
           </p>
         </div>
         
         <div className="mt-8 pt-8 border-t border-border">
           <p className="text-center text-xs text-muted-foreground">
-            Disclaimer: StockSense AI provides information for educational purposes only. 
+            Disclaimer: MarketLens AI provides information for educational purposes only. 
             This is not financial advice. Always do your own research before making investment decisions.
           </p>
         </div>
