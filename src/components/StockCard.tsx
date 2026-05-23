@@ -10,7 +10,7 @@ interface StockCardProps {
   price: number;
   change: number;
   changePercent: number;
-  recommendation: "buy" | "hold" | "sell";
+  recommendation?: "buy" | "hold" | "avoid";
 }
 
 const StockCard = ({ symbol, name, price, change, changePercent, recommendation }: StockCardProps) => {
@@ -19,7 +19,7 @@ const StockCard = ({ symbol, name, price, change, changePercent, recommendation 
   const recommendationStyles = {
     buy: "bg-success/10 text-success border-success/20",
     hold: "bg-warning/10 text-warning border-warning/20",
-    sell: "bg-destructive/10 text-destructive border-destructive/20",
+    avoid: "bg-destructive/10 text-destructive border-destructive/20",
   };
 
   return (
@@ -31,9 +31,11 @@ const StockCard = ({ symbol, name, price, change, changePercent, recommendation 
               <h3 className="text-lg font-semibold">{symbol}</h3>
               <p className="text-sm text-muted-foreground">{name}</p>
             </div>
-            <span className={`rounded-full border px-2.5 py-0.5 text-xs font-medium capitalize ${recommendationStyles[recommendation]}`}>
-              {recommendation}
-            </span>
+            {recommendation && (
+              <span className={`rounded-full border px-2.5 py-0.5 text-xs font-medium capitalize ${recommendationStyles[recommendation]}`}>
+                {recommendation}
+              </span>
+            )}
           </div>
           
           <div className="flex items-end justify-between">

@@ -1,11 +1,23 @@
 "use client";
 
 import { useState } from "react";
-import { Bell, Plus, Trash2, TrendingUp, TrendingDown, Brain, Newspaper } from "lucide-react";
+import Link from "next/link";
+import {
+  Bell,
+  Plus,
+  Trash2,
+  TrendingUp,
+  TrendingDown,
+  Brain,
+  ArrowUpDown,
+  Loader2,
+  Lock,
+} from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   Dialog,
   DialogContent,
@@ -24,81 +36,110 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
+import { useAuth } from "@/lib/auth/auth-context";
+import {
+  useAlerts,
+  useCreateAlert,
+  useSetAlertActive,
+  useDeleteAlert,
+} from "@/hooks/api";
+import type { Alert, AlertType, CreateAlertInput } from "@/lib/api/types";
+import { ApiError } from "@/lib/api/client";
 
-interface Alert {
-  id: string;
-  symbol: string;
-  type: "price" | "change" | "ai" | "news";
-  condition: string;
-  value: string;
-  enabled: boolean;
-  triggered?: boolean;
+const typeIcons: Record<AlertType, React.ComponentType<{ className?: string }>> = {
+  price_above: TrendingUp,
+  price_below: TrendingDown,
+  price_change_percent: ArrowUpDown,
+  recommendation_change: Brain,
+};
+
+const typeLabels: Record<AlertType, string> = {
+  price_above: "Price Above",
+  price_below: "Price Below",
+  price_change_percent: "% Change",
+  recommendation_change: "AI Recommendation",
+};
+
+function describe(alert: Alert): string {
+  switch (alert.type) {
+    case "price_above":
+      return `Above $${alert.targetPrice}`;
+    case "price_below":
+      return `Below $${alert.targetPrice}`;
+    case "price_change_percent":
+      return `${alert.thresholdPercent}%+ daily change`;
+    case "recommendation_change":
+      return alert.targetAction ? `Changes to ${alert.targetAction}` : "Recommendation changes";
+    default:
+      return "";
+  }
 }
 
-const initialAlerts: Alert[] = [
-  { id: "1", symbol: "AAPL", type: "price", condition: "above", value: "$180.00", enabled: true },
-  { id: "2", symbol: "NVDA", type: "change", condition: "drops", value: "5%", enabled: true, triggered: true },
-  { id: "3", symbol: "TSLA", type: "ai", condition: "changes to", value: "Buy", enabled: true },
-  { id: "4", symbol: "MSFT", type: "news", condition: "sentiment", value: "Negative", enabled: false },
-  { id: "5", symbol: "GOOGL", type: "price", condition: "below", value: "$150.00", enabled: true },
-];
-
-const alertTypeIcons = {
-  price: TrendingUp,
-  change: TrendingDown,
-  ai: Brain,
-  news: Newspaper,
-};
-
-const alertTypeLabels = {
-  price: "Price Alert",
-  change: "% Change Alert",
-  ai: "AI Recommendation",
-  news: "News Sentiment",
-};
+const needsPrice = (t: AlertType) => t === "price_above" || t === "price_below";
+const needsPercent = (t: AlertType) => t === "price_change_percent";
 
 export default function DashboardAlerts() {
-  const [alerts, setAlerts] = useState<Alert[]>(initialAlerts);
+  const { isAuthenticated, isLoading: authLoading } = useAuth();
+  const { data: alerts, isLoading } = useAlerts();
+  const createAlert = useCreateAlert();
+  const setActive = useSetAlertActive();
+  const deleteAlert = useDeleteAlert();
+
   const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [newAlert, setNewAlert] = useState({
+  const [newAlert, setNewAlert] = useState<{ symbol: string; type: AlertType; value: string }>({
     symbol: "",
-    type: "price" as Alert["type"],
-    condition: "",
+    type: "price_above",
     value: "",
   });
 
-  const toggleAlert = (id: string) => {
-    setAlerts(
-      alerts.map((alert) =>
-        alert.id === id ? { ...alert, enabled: !alert.enabled } : alert
-      )
-    );
-  };
+  const all = alerts ?? [];
 
-  const deleteAlert = (id: string) => {
-    setAlerts(alerts.filter((alert) => alert.id !== id));
-    toast.success("Alert deleted");
-  };
-
-  const handleAddAlert = () => {
-    if (newAlert.symbol && newAlert.condition && newAlert.value) {
-      const alert: Alert = {
-        id: Date.now().toString(),
-        symbol: newAlert.symbol.toUpperCase(),
-        type: newAlert.type,
-        condition: newAlert.condition,
-        value: newAlert.value,
-        enabled: true,
-      };
-      setAlerts([...alerts, alert]);
-      setNewAlert({ symbol: "", type: "price", condition: "", value: "" });
-      setIsDialogOpen(false);
-      toast.success(`Alert created for ${alert.symbol}`);
+  const handleToggle = async (alert: Alert) => {
+    try {
+      await setActive.mutateAsync({ id: alert.id, isActive: !alert.isActive });
+    } catch (error) {
+      toast.error(error instanceof ApiError ? error.message : "Could not update alert");
     }
   };
 
-  const triggeredAlerts = alerts.filter((a) => a.triggered);
-  const activeAlerts = alerts.filter((a) => a.enabled && !a.triggered);
+  const handleDelete = async (id: string) => {
+    try {
+      await deleteAlert.mutateAsync(id);
+      toast.success("Alert deleted");
+    } catch (error) {
+      toast.error(error instanceof ApiError ? error.message : "Could not delete alert");
+    }
+  };
+
+  const handleAdd = async () => {
+    const symbol = newAlert.symbol.trim().toUpperCase();
+    if (!symbol) return;
+    const input: CreateAlertInput = { symbol, type: newAlert.type };
+    if (needsPrice(newAlert.type)) input.targetPrice = parseFloat(newAlert.value);
+    if (needsPercent(newAlert.type)) input.thresholdPercent = parseFloat(newAlert.value);
+    try {
+      await createAlert.mutateAsync(input);
+      toast.success(`Alert created for ${symbol}`);
+      setNewAlert({ symbol: "", type: "price_above", value: "" });
+      setIsDialogOpen(false);
+    } catch (error) {
+      toast.error(error instanceof ApiError ? error.message : "Could not create alert");
+    }
+  };
+
+  if (!authLoading && !isAuthenticated) {
+    return (
+      <Card className="mx-auto max-w-md py-12">
+        <CardContent className="flex flex-col items-center justify-center text-center">
+          <Lock className="mb-4 h-12 w-12 text-muted-foreground" />
+          <h3 className="text-xl font-semibold mb-2">Sign in to manage alerts</h3>
+          <Button asChild>
+            <Link href="/login">Sign In</Link>
+          </Button>
+        </CardContent>
+      </Card>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -108,9 +149,7 @@ export default function DashboardAlerts() {
             <Bell className="h-8 w-8 text-primary" />
             Alerts
           </h1>
-          <p className="text-muted-foreground">
-            Get notified when stocks hit your targets.
-          </p>
+          <p className="text-muted-foreground">Get notified when stocks hit your targets.</p>
         </div>
         <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
           <DialogTrigger asChild>
@@ -122,9 +161,7 @@ export default function DashboardAlerts() {
           <DialogContent>
             <DialogHeader>
               <DialogTitle>Create New Alert</DialogTitle>
-              <DialogDescription>
-                Set up a new alert to get notified about stock movements.
-              </DialogDescription>
+              <DialogDescription>Set up a new alert for a stock.</DialogDescription>
             </DialogHeader>
             <div className="space-y-4 mt-4">
               <div className="space-y-2">
@@ -133,7 +170,7 @@ export default function DashboardAlerts() {
                   placeholder="e.g., AAPL"
                   value={newAlert.symbol}
                   onChange={(e) =>
-                    setNewAlert({ ...newAlert, symbol: e.target.value })
+                    setNewAlert({ ...newAlert, symbol: e.target.value.toUpperCase() })
                   }
                 />
               </div>
@@ -141,152 +178,107 @@ export default function DashboardAlerts() {
                 <Label>Alert Type</Label>
                 <Select
                   value={newAlert.type}
-                  onValueChange={(value: Alert["type"]) =>
-                    setNewAlert({ ...newAlert, type: value })
-                  }
+                  onValueChange={(value: AlertType) => setNewAlert({ ...newAlert, type: value })}
                 >
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="price">Price Alert</SelectItem>
-                    <SelectItem value="change">% Change Alert</SelectItem>
-                    <SelectItem value="ai">AI Recommendation</SelectItem>
-                    <SelectItem value="news">News Sentiment</SelectItem>
+                    <SelectItem value="price_above">Price Above</SelectItem>
+                    <SelectItem value="price_below">Price Below</SelectItem>
+                    <SelectItem value="price_change_percent">% Change</SelectItem>
+                    <SelectItem value="recommendation_change">AI Recommendation</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
-              <div className="space-y-2">
-                <Label>Condition</Label>
-                <Input
-                  placeholder="e.g., above, below, changes to"
-                  value={newAlert.condition}
-                  onChange={(e) =>
-                    setNewAlert({ ...newAlert, condition: e.target.value })
-                  }
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Value</Label>
-                <Input
-                  placeholder="e.g., $180.00, 5%, Buy"
-                  value={newAlert.value}
-                  onChange={(e) =>
-                    setNewAlert({ ...newAlert, value: e.target.value })
-                  }
-                />
-              </div>
-              <Button className="w-full" onClick={handleAddAlert}>
-                Create Alert
+              {(needsPrice(newAlert.type) || needsPercent(newAlert.type)) && (
+                <div className="space-y-2">
+                  <Label>{needsPercent(newAlert.type) ? "Percentage (%)" : "Price ($)"}</Label>
+                  <Input
+                    type="number"
+                    placeholder={needsPercent(newAlert.type) ? "e.g., 5" : "e.g., 180"}
+                    value={newAlert.value}
+                    onChange={(e) => setNewAlert({ ...newAlert, value: e.target.value })}
+                  />
+                </div>
+              )}
+              <Button
+                className="w-full"
+                onClick={handleAdd}
+                disabled={
+                  createAlert.isPending ||
+                  !newAlert.symbol ||
+                  ((needsPrice(newAlert.type) || needsPercent(newAlert.type)) && !newAlert.value)
+                }
+              >
+                {createAlert.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Create Alert"}
               </Button>
             </div>
           </DialogContent>
         </Dialog>
       </div>
 
-      {triggeredAlerts.length > 0 && (
-        <Card className="border-warning/50 bg-warning/5">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-warning">
-              <Bell className="h-5 w-5" />
-              Triggered Alerts ({triggeredAlerts.length})
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-3">
-              {triggeredAlerts.map((alert) => {
-                const Icon = alertTypeIcons[alert.type];
-                return (
-                  <div
-                    key={alert.id}
-                    className="flex items-center justify-between p-4 rounded-lg bg-background border border-warning/30"
-                  >
-                    <div className="flex items-center gap-4">
-                      <div className="h-10 w-10 rounded-lg bg-warning/10 flex items-center justify-center">
-                        <Icon className="h-5 w-5 text-warning" />
-                      </div>
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <span className="font-semibold">{alert.symbol}</span>
-                          <Badge variant="outline">{alertTypeLabels[alert.type]}</Badge>
-                        </div>
-                        <p className="text-sm text-muted-foreground">
-                          {alert.condition} {alert.value}
-                        </p>
-                      </div>
-                    </div>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => deleteAlert(alert.id)}
-                      className="text-destructive hover:text-destructive"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </div>
-                );
-              })}
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
       <Card>
         <CardHeader>
-          <CardTitle>All Alerts ({alerts.length})</CardTitle>
+          <CardTitle>All Alerts ({all.length})</CardTitle>
         </CardHeader>
         <CardContent>
-          {alerts.length === 0 ? (
+          {isLoading ? (
+            <div className="space-y-3">
+              <Skeleton className="h-16 w-full" />
+              <Skeleton className="h-16 w-full" />
+            </div>
+          ) : all.length === 0 ? (
             <div className="text-center py-8 text-muted-foreground">
               No alerts set up yet. Create one to get started!
             </div>
           ) : (
             <div className="space-y-3">
-              {alerts.map((alert) => {
-                const Icon = alertTypeIcons[alert.type];
+              {all.map((alert) => {
+                const Icon = typeIcons[alert.type];
                 return (
                   <div
                     key={alert.id}
                     className={`flex items-center justify-between p-4 rounded-lg transition-colors ${
-                      alert.enabled ? "bg-muted/50" : "bg-muted/20 opacity-60"
+                      alert.isActive ? "bg-muted/50" : "bg-muted/20 opacity-60"
                     }`}
                   >
                     <div className="flex items-center gap-4">
                       <div
                         className={`h-10 w-10 rounded-lg flex items-center justify-center ${
-                          alert.enabled ? "bg-primary/10" : "bg-muted"
+                          alert.isActive ? "bg-primary/10" : "bg-muted"
                         }`}
                       >
                         <Icon
                           className={`h-5 w-5 ${
-                            alert.enabled ? "text-primary" : "text-muted-foreground"
+                            alert.isActive ? "text-primary" : "text-muted-foreground"
                           }`}
                         />
                       </div>
                       <div>
                         <div className="flex items-center gap-2">
-                          <span className="font-semibold">{alert.symbol}</span>
-                          <Badge variant="outline">{alertTypeLabels[alert.type]}</Badge>
-                          {alert.triggered && (
-                            <Badge className="bg-warning text-warning-foreground">
-                              Triggered
-                            </Badge>
-                          )}
+                          <Link
+                            href={`/stock/${alert.symbol}`}
+                            className="font-semibold hover:text-primary"
+                          >
+                            {alert.symbol}
+                          </Link>
+                          <Badge variant="outline">{typeLabels[alert.type]}</Badge>
                         </div>
-                        <p className="text-sm text-muted-foreground">
-                          {alert.condition} {alert.value}
-                        </p>
+                        <p className="text-sm text-muted-foreground">{describe(alert)}</p>
                       </div>
                     </div>
                     <div className="flex items-center gap-4">
                       <Switch
-                        checked={alert.enabled}
-                        onCheckedChange={() => toggleAlert(alert.id)}
+                        checked={alert.isActive}
+                        onCheckedChange={() => handleToggle(alert)}
+                        disabled={setActive.isPending}
                       />
                       <Button
                         variant="ghost"
                         size="icon"
-                        onClick={() => deleteAlert(alert.id)}
+                        onClick={() => handleDelete(alert.id)}
+                        disabled={deleteAlert.isPending}
                         className="text-destructive hover:text-destructive"
                       >
                         <Trash2 className="h-4 w-4" />

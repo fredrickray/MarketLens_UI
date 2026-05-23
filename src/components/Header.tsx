@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { TrendingUp, Menu, Star, Bell } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { TrendingUp, Menu, Star, Bell, LayoutDashboard, LogOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Sheet,
@@ -11,9 +12,18 @@ import {
   SheetTrigger,
 } from "@/components/ui/sheet";
 import { useState } from "react";
+import { useAuth } from "@/lib/auth/auth-context";
 
 const Header = () => {
   const [open, setOpen] = useState(false);
+  const router = useRouter();
+  const { isAuthenticated, user, logout } = useAuth();
+
+  const handleLogout = async () => {
+    await logout();
+    setOpen(false);
+    router.push("/");
+  };
 
   const navLinks = [
     { href: "/#features", label: "Features", isAnchor: true },
@@ -56,12 +66,34 @@ const Header = () => {
         </nav>
         
         <div className="flex items-center gap-3">
-          <Button variant="ghost" size="sm" className="hidden md:inline-flex" asChild>
-            <Link href="/login">Sign In</Link>
-          </Button>
-          <Button size="sm" asChild>
-            <Link href="/signup">Get Started</Link>
-          </Button>
+          {isAuthenticated ? (
+            <>
+              <Button variant="ghost" size="sm" className="hidden md:inline-flex" asChild>
+                <Link href="/dashboard">
+                  <LayoutDashboard className="mr-1.5 h-4 w-4" />
+                  Dashboard
+                </Link>
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                className="hidden md:inline-flex"
+                onClick={handleLogout}
+              >
+                <LogOut className="mr-1.5 h-4 w-4" />
+                Sign Out
+              </Button>
+            </>
+          ) : (
+            <>
+              <Button variant="ghost" size="sm" className="hidden md:inline-flex" asChild>
+                <Link href="/login">Sign In</Link>
+              </Button>
+              <Button size="sm" asChild>
+                <Link href="/signup">Get Started</Link>
+              </Button>
+            </>
+          )}
           
           <Sheet open={open} onOpenChange={setOpen}>
             <SheetTrigger asChild>
@@ -102,18 +134,42 @@ const Header = () => {
                   )
                 )}
                 <div className="my-4 border-t border-border" />
-                <Link
-                  href="/login"
-                  onClick={() => setOpen(false)}
-                  className="flex items-center gap-3 rounded-lg px-3 py-2 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-                >
-                  Sign In
-                </Link>
-                <Button asChild className="mt-2">
-                  <Link href="/signup" onClick={() => setOpen(false)}>
-                    Get Started
-                  </Link>
-                </Button>
+                {isAuthenticated ? (
+                  <>
+                    <Link
+                      href="/dashboard"
+                      onClick={() => setOpen(false)}
+                      className="flex items-center gap-3 rounded-lg px-3 py-2 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                    >
+                      <LayoutDashboard className="h-5 w-5" />
+                      Dashboard
+                    </Link>
+                    {user && (
+                      <p className="px-3 text-xs text-muted-foreground">
+                        Signed in as {user.email}
+                      </p>
+                    )}
+                    <Button variant="outline" className="mt-2" onClick={handleLogout}>
+                      <LogOut className="mr-1.5 h-4 w-4" />
+                      Sign Out
+                    </Button>
+                  </>
+                ) : (
+                  <>
+                    <Link
+                      href="/login"
+                      onClick={() => setOpen(false)}
+                      className="flex items-center gap-3 rounded-lg px-3 py-2 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                    >
+                      Sign In
+                    </Link>
+                    <Button asChild className="mt-2">
+                      <Link href="/signup" onClick={() => setOpen(false)}>
+                        Get Started
+                      </Link>
+                    </Button>
+                  </>
+                )}
               </nav>
             </SheetContent>
           </Sheet>

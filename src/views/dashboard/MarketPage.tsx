@@ -1,11 +1,20 @@
 "use client";
 
 import { TrendingUp, TrendingDown, BarChart3, Clock } from "lucide-react";
+import { useQueries } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
 import Link from "next/link";
+import { stocksApi } from "@/lib/api/endpoints";
+import type { StockOverview } from "@/lib/api/types";
 
+const ACTIVE_BASKET = [
+  "NVDA", "TSLA", "AAPL", "AMD", "META", "MSFT", "GOOGL", "AMZN", "INTC", "NFLX",
+];
+
+// Sector and earnings data are illustrative — the API does not expose these feeds.
 const sectors = [
   { name: "Technology", change: "+2.4%", isPositive: true, stocks: 142 },
   { name: "Healthcare", change: "+1.2%", isPositive: true, stocks: 89 },
@@ -15,14 +24,6 @@ const sectors = [
   { name: "Real Estate", change: "+0.3%", isPositive: true, stocks: 38 },
 ];
 
-const mostActive = [
-  { symbol: "NVDA", name: "NVIDIA", volume: "85.2M", price: "$878.35", change: "+4.12%" },
-  { symbol: "TSLA", name: "Tesla", volume: "72.1M", price: "$175.21", change: "-1.87%" },
-  { symbol: "AAPL", name: "Apple", volume: "58.4M", price: "$178.72", change: "+2.34%" },
-  { symbol: "AMD", name: "AMD", volume: "52.8M", price: "$178.50", change: "+5.67%" },
-  { symbol: "META", name: "Meta", volume: "48.2M", price: "$505.95", change: "+3.24%" },
-];
-
 const upcomingEarnings = [
   { symbol: "NVDA", name: "NVIDIA", date: "Feb 21", time: "After Close" },
   { symbol: "WMT", name: "Walmart", date: "Feb 20", time: "Before Open" },
@@ -30,53 +31,42 @@ const upcomingEarnings = [
   { symbol: "BKNG", name: "Booking Holdings", date: "Feb 22", time: "After Close" },
 ];
 
+function formatVolume(value?: number): string {
+  if (!value) return "—";
+  if (value >= 1e6) return `${(value / 1e6).toFixed(1)}M`;
+  if (value >= 1e3) return `${(value / 1e3).toFixed(1)}K`;
+  return `${value}`;
+}
+
 export default function MarketPage() {
+  const results = useQueries({
+    queries: ACTIVE_BASKET.map((symbol) => ({
+      queryKey: ["stocks", "overview", symbol],
+      queryFn: () => stocksApi.overview(symbol),
+      staleTime: 60_000,
+    })),
+  });
+
+  const loading = results.some((r) => r.isLoading);
+  const mostActive = results
+    .map((r) => r.data)
+    .filter((d): d is StockOverview => !!d)
+    .sort((a, b) => (b.quote.volume ?? 0) - (a.quote.volume ?? 0))
+    .slice(0, 5);
+
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-3xl font-bold tracking-tight">Market Overview</h1>
-        <p className="text-muted-foreground">
-          Real-time market data and sector performance.
-        </p>
+        <p className="text-muted-foreground">Real-time quotes and sector performance.</p>
       </div>
 
-      <Tabs defaultValue="sectors" className="w-full">
+      <Tabs defaultValue="active" className="w-full">
         <TabsList>
-          <TabsTrigger value="sectors">Sectors</TabsTrigger>
           <TabsTrigger value="active">Most Active</TabsTrigger>
+          <TabsTrigger value="sectors">Sectors</TabsTrigger>
           <TabsTrigger value="earnings">Earnings Calendar</TabsTrigger>
         </TabsList>
-
-        <TabsContent value="sectors" className="mt-4">
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {sectors.map((sector) => (
-              <Card key={sector.name} className="hover:border-primary/50 transition-colors cursor-pointer">
-                <CardContent className="pt-4">
-                  <div className="flex items-start justify-between">
-                    <div>
-                      <h3 className="font-semibold">{sector.name}</h3>
-                      <p className="text-sm text-muted-foreground">{sector.stocks} stocks</p>
-                    </div>
-                    <div className="text-right">
-                      <span
-                        className={`text-lg font-bold flex items-center gap-1 ${
-                          sector.isPositive ? "text-success" : "text-destructive"
-                        }`}
-                      >
-                        {sector.isPositive ? (
-                          <TrendingUp className="h-5 w-5" />
-                        ) : (
-                          <TrendingDown className="h-5 w-5" />
-                        )}
-                        {sector.change}
-                      </span>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        </TabsContent>
 
         <TabsContent value="active" className="mt-4">
           <Card>
@@ -88,45 +78,87 @@ export default function MarketPage() {
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
-                {mostActive.map((stock, index) => (
-                  <Link
-                    key={stock.symbol}
-                    href={`/stock/${stock.symbol}`}
-                    className="flex items-center justify-between p-4 rounded-lg bg-muted/50 hover:bg-muted transition-colors"
-                  >
-                    <div className="flex items-center gap-4">
-                      <span className="text-2xl font-bold text-muted-foreground">
-                        {index + 1}
-                      </span>
-                      <div>
-                        <span className="font-semibold">{stock.symbol}</span>
-                        <p className="text-sm text-muted-foreground">{stock.name}</p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-6">
-                      <div className="text-right">
-                        <span className="text-sm text-muted-foreground">Volume</span>
-                        <p className="font-medium">{stock.volume}</p>
-                      </div>
-                      <div className="text-right">
-                        <span className="font-medium">{stock.price}</span>
-                        <p
-                          className={`text-sm font-medium ${
-                            stock.change.startsWith("+") ? "text-success" : "text-destructive"
-                          }`}
-                        >
-                          {stock.change}
-                        </p>
-                      </div>
-                    </div>
-                  </Link>
-                ))}
+                {loading &&
+                  [0, 1, 2, 3, 4].map((i) => <Skeleton key={i} className="h-16 w-full" />)}
+                {!loading &&
+                  mostActive.map((stock, index) => {
+                    const isPositive = stock.quote.changePercent >= 0;
+                    return (
+                      <Link
+                        key={stock.symbol}
+                        href={`/stock/${stock.symbol}`}
+                        className="flex items-center justify-between p-4 rounded-lg bg-muted/50 hover:bg-muted transition-colors"
+                      >
+                        <div className="flex items-center gap-4">
+                          <span className="text-2xl font-bold text-muted-foreground">
+                            {index + 1}
+                          </span>
+                          <div>
+                            <span className="font-semibold">{stock.symbol}</span>
+                            <p className="text-sm text-muted-foreground">{stock.name}</p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-6">
+                          <div className="text-right">
+                            <span className="text-sm text-muted-foreground">Volume</span>
+                            <p className="font-medium">{formatVolume(stock.quote.volume)}</p>
+                          </div>
+                          <div className="text-right">
+                            <span className="font-medium">${stock.quote.price.toFixed(2)}</span>
+                            <p
+                              className={`text-sm font-medium ${
+                                isPositive ? "text-success" : "text-destructive"
+                              }`}
+                            >
+                              {isPositive ? "+" : ""}
+                              {stock.quote.changePercent.toFixed(2)}%
+                            </p>
+                          </div>
+                        </div>
+                      </Link>
+                    );
+                  })}
               </div>
             </CardContent>
           </Card>
         </TabsContent>
 
+        <TabsContent value="sectors" className="mt-4">
+          <p className="mb-4 text-sm text-muted-foreground">
+            Sector performance is illustrative and not yet wired to a live data source.
+          </p>
+          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {sectors.map((sector) => (
+              <Card key={sector.name}>
+                <CardContent className="pt-4">
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <h3 className="font-semibold">{sector.name}</h3>
+                      <p className="text-sm text-muted-foreground">{sector.stocks} stocks</p>
+                    </div>
+                    <span
+                      className={`text-lg font-bold flex items-center gap-1 ${
+                        sector.isPositive ? "text-success" : "text-destructive"
+                      }`}
+                    >
+                      {sector.isPositive ? (
+                        <TrendingUp className="h-5 w-5" />
+                      ) : (
+                        <TrendingDown className="h-5 w-5" />
+                      )}
+                      {sector.change}
+                    </span>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </TabsContent>
+
         <TabsContent value="earnings" className="mt-4">
+          <p className="mb-4 text-sm text-muted-foreground">
+            Earnings dates are illustrative and not yet wired to a live data source.
+          </p>
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">

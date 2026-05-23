@@ -1,102 +1,37 @@
 "use client";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Brain, TrendingUp, TrendingDown, Minus, Sparkles } from "lucide-react";
+import { Brain, Sparkles, AlertTriangle } from "lucide-react";
+import type { AnalysisRecommendation } from "@/lib/api/types";
 
 interface AIInsightsProps {
-  stock: {
-    symbol: string;
-    recommendation: "buy" | "hold" | "sell";
-  };
+  recommendation: AnalysisRecommendation;
+  featuresUsed?: string[];
+  modelVersion?: string;
+  mode?: string;
 }
 
-const insightsData: Record<string, {
-  summary: string;
-  confidence: number;
-  factors: { label: string; sentiment: "positive" | "neutral" | "negative" }[];
-  prediction: string;
-}> = {
-  AAPL: {
-    summary: "Strong buy signal driven by iPhone 16 momentum and services growth. AI integration in upcoming products positions Apple well for future growth.",
-    confidence: 87,
-    factors: [
-      { label: "Revenue Growth", sentiment: "positive" },
-      { label: "Services Expansion", sentiment: "positive" },
-      { label: "China Market Concerns", sentiment: "negative" },
-      { label: "AI Product Integration", sentiment: "positive" },
-    ],
-    prediction: "Target price $210 within 3 months",
-  },
-  NVDA: {
-    summary: "Exceptional momentum from AI chip demand. Data center revenue continues to exceed expectations. Market leader position strengthens.",
-    confidence: 92,
-    factors: [
-      { label: "AI Chip Demand", sentiment: "positive" },
-      { label: "Data Center Growth", sentiment: "positive" },
-      { label: "Competition Increasing", sentiment: "neutral" },
-      { label: "Supply Chain Stable", sentiment: "positive" },
-    ],
-    prediction: "Target price $950 within 3 months",
-  },
-  TSLA: {
-    summary: "Mixed signals with production efficiency gains offset by margin pressure and increasing EV competition. Robotaxi timeline uncertainty adds risk.",
-    confidence: 58,
-    factors: [
-      { label: "Production Efficiency", sentiment: "positive" },
-      { label: "Price Competition", sentiment: "negative" },
-      { label: "FSD Development", sentiment: "neutral" },
-      { label: "Energy Business", sentiment: "positive" },
-    ],
-    prediction: "Sideways movement expected, range $230-$270",
-  },
-  MSFT: {
-    summary: "Azure cloud growth and Copilot AI integration driving strong enterprise adoption. Gaming division showing improved margins.",
-    confidence: 85,
-    factors: [
-      { label: "Azure Growth", sentiment: "positive" },
-      { label: "AI Copilot Adoption", sentiment: "positive" },
-      { label: "Gaming Revenue", sentiment: "neutral" },
-      { label: "Enterprise Spending", sentiment: "positive" },
-    ],
-    prediction: "Target price $450 within 3 months",
-  },
-  META: {
-    summary: "Strong advertising recovery and Reels monetization. Reality Labs losses narrowing. AI investments showing early returns.",
-    confidence: 81,
-    factors: [
-      { label: "Ad Revenue Recovery", sentiment: "positive" },
-      { label: "Reels Growth", sentiment: "positive" },
-      { label: "Reality Labs Costs", sentiment: "negative" },
-      { label: "AI Features", sentiment: "positive" },
-    ],
-    prediction: "Target price $540 within 3 months",
-  },
-  GOOGL: {
-    summary: "Search revenue stable but AI competition concerns persist. Cloud growth positive but below expectations. YouTube maintaining strength.",
-    confidence: 62,
-    factors: [
-      { label: "Search Dominance", sentiment: "neutral" },
-      { label: "AI Competition", sentiment: "negative" },
-      { label: "Cloud Growth", sentiment: "positive" },
-      { label: "YouTube Revenue", sentiment: "positive" },
-    ],
-    prediction: "Consolidation expected, range $135-$150",
-  },
+const FEATURE_LABELS: Record<string, string> = {
+  return_1d: "1-day return",
+  return_5d: "5-day return",
+  return_10d: "10-day return",
+  return_20d: "20-day return",
+  volatility_20d: "20-day volatility",
+  volume_ratio_5d: "Volume vs 5-day avg",
+  price_vs_sma_20: "Price vs 20-day average",
+  rsi_14: "RSI (14)",
+  sma_5_vs_sma_20: "Short vs medium trend",
+  vol_ratio_5_20: "Volatility regime",
+  volume_trend_5_20: "Volume trend",
 };
 
-const AIInsights = ({ stock }: AIInsightsProps) => {
-  const insights = insightsData[stock.symbol] || insightsData.AAPL;
-
-  const getSentimentIcon = (sentiment: "positive" | "neutral" | "negative") => {
-    switch (sentiment) {
-      case "positive":
-        return <TrendingUp className="h-3.5 w-3.5 text-success" />;
-      case "negative":
-        return <TrendingDown className="h-3.5 w-3.5 text-destructive" />;
-      default:
-        return <Minus className="h-3.5 w-3.5 text-warning" />;
-    }
-  };
+const AIInsights = ({
+  recommendation,
+  featuresUsed,
+  modelVersion,
+  mode,
+}: AIInsightsProps) => {
+  const confidencePct = Math.round(recommendation.confidence * 100);
 
   return (
     <Card className="h-full">
@@ -107,40 +42,54 @@ const AIInsights = ({ stock }: AIInsightsProps) => {
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
-        {/* Confidence Score */}
         <div className="flex items-center justify-between rounded-lg bg-primary/10 p-3">
-          <span className="text-sm font-medium">AI Confidence</span>
+          <span className="text-sm font-medium">Model confidence</span>
           <div className="flex items-center gap-2">
             <Sparkles className="h-4 w-4 text-primary" />
-            <span className="text-lg font-bold text-primary">{insights.confidence}%</span>
+            <span className="text-lg font-bold text-primary">{confidencePct}%</span>
           </div>
         </div>
 
-        {/* Summary */}
-        <div>
-          <p className="text-sm text-muted-foreground leading-relaxed">{insights.summary}</p>
-        </div>
+        <p className="text-sm text-muted-foreground leading-relaxed">
+          {recommendation.explanation}
+        </p>
 
-        {/* Key Factors */}
-        <div>
-          <h4 className="mb-2 text-sm font-semibold">Key Factors</h4>
+        {featuresUsed && featuresUsed.length > 0 && (
+          <div>
+            <h4 className="mb-2 text-sm font-semibold">Key drivers</h4>
+            <div className="space-y-2">
+              {featuresUsed.map((feature) => (
+                <div
+                  key={feature}
+                  className="flex items-center justify-between rounded-md bg-secondary/50 px-3 py-2"
+                >
+                  <span className="text-sm">{FEATURE_LABELS[feature] ?? feature}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {recommendation.warnings.length > 0 && (
           <div className="space-y-2">
-            {insights.factors.map((factor) => (
-              <div 
-                key={factor.label} 
-                className="flex items-center justify-between rounded-md bg-secondary/50 px-3 py-2"
+            {recommendation.warnings.map((warning) => (
+              <div
+                key={warning}
+                className="flex items-start gap-2 rounded-lg border border-warning/20 bg-warning/5 p-3 text-sm text-warning"
               >
-                <span className="text-sm">{factor.label}</span>
-                {getSentimentIcon(factor.sentiment)}
+                <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+                <span>{warning}</span>
               </div>
             ))}
           </div>
-        </div>
+        )}
 
-        {/* Prediction */}
-        <div className="rounded-lg border border-primary/20 bg-primary/5 p-3">
-          <p className="text-sm font-medium text-primary">{insights.prediction}</p>
-        </div>
+        {(modelVersion || mode) && (
+          <p className="text-xs text-muted-foreground">
+            Model {modelVersion ?? "—"}
+            {mode ? ` · ${mode}` : ""}
+          </p>
+        )}
       </CardContent>
     </Card>
   );

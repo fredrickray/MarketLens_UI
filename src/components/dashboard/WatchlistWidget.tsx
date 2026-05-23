@@ -3,17 +3,59 @@
 import { Star, TrendingUp, TrendingDown, Plus } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 import Link from "next/link";
+import { useWatchlist, useStockOverview } from "@/hooks/api";
 
-const watchlistStocks = [
-  { symbol: "AAPL", name: "Apple Inc.", price: "$178.72", change: "+2.34%", isPositive: true },
-  { symbol: "NVDA", name: "NVIDIA Corp.", price: "$878.35", change: "+4.12%", isPositive: true },
-  { symbol: "TSLA", name: "Tesla Inc.", price: "$175.21", change: "-1.87%", isPositive: false },
-  { symbol: "MSFT", name: "Microsoft", price: "$425.22", change: "+1.15%", isPositive: true },
-  { symbol: "GOOGL", name: "Alphabet Inc.", price: "$156.37", change: "+0.89%", isPositive: true },
-];
+function WatchlistRow({ symbol }: { symbol: string }) {
+  const { data: overview, isLoading } = useStockOverview(symbol);
+  const quote = overview?.quote;
+  const isPositive = (quote?.change ?? 0) >= 0;
+
+  return (
+    <Link
+      href={`/stock/${symbol}`}
+      className="flex items-center justify-between p-3 rounded-lg bg-muted/50 hover:bg-muted transition-colors"
+    >
+      <div className="flex items-center gap-3">
+        <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center">
+          <span className="text-sm font-bold text-primary">{symbol.slice(0, 2)}</span>
+        </div>
+        <div>
+          <span className="font-semibold">{symbol}</span>
+          <p className="text-sm text-muted-foreground">{overview?.name ?? symbol}</p>
+        </div>
+      </div>
+      <div className="text-right">
+        {isLoading || !quote ? (
+          <Skeleton className="h-5 w-16" />
+        ) : (
+          <>
+            <span className="font-medium">${quote.price.toFixed(2)}</span>
+            <p
+              className={`text-sm font-medium flex items-center justify-end gap-1 ${
+                isPositive ? "text-success" : "text-destructive"
+              }`}
+            >
+              {isPositive ? (
+                <TrendingUp className="h-3 w-3" />
+              ) : (
+                <TrendingDown className="h-3 w-3" />
+              )}
+              {isPositive ? "+" : ""}
+              {quote.changePercent.toFixed(2)}%
+            </p>
+          </>
+        )}
+      </div>
+    </Link>
+  );
+}
 
 export function WatchlistWidget() {
+  const { data: symbols, isLoading } = useWatchlist();
+  const list = (symbols ?? []).slice(0, 5);
+
   return (
     <Card>
       <CardHeader className="flex flex-row items-center justify-between">
@@ -30,39 +72,19 @@ export function WatchlistWidget() {
       </CardHeader>
       <CardContent>
         <div className="space-y-3">
-          {watchlistStocks.map((stock) => (
-            <Link
-              key={stock.symbol}
-              href={`/stock/${stock.symbol}`}
-              className="flex items-center justify-between p-3 rounded-lg bg-muted/50 hover:bg-muted transition-colors"
-            >
-              <div className="flex items-center gap-3">
-                <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center">
-                  <span className="text-sm font-bold text-primary">
-                    {stock.symbol.slice(0, 2)}
-                  </span>
-                </div>
-                <div>
-                  <span className="font-semibold">{stock.symbol}</span>
-                  <p className="text-sm text-muted-foreground">{stock.name}</p>
-                </div>
-              </div>
-              <div className="text-right">
-                <span className="font-medium">{stock.price}</span>
-                <p
-                  className={`text-sm font-medium flex items-center justify-end gap-1 ${
-                    stock.isPositive ? "text-success" : "text-destructive"
-                  }`}
-                >
-                  {stock.isPositive ? (
-                    <TrendingUp className="h-3 w-3" />
-                  ) : (
-                    <TrendingDown className="h-3 w-3" />
-                  )}
-                  {stock.change}
-                </p>
-              </div>
-            </Link>
+          {isLoading && (
+            <>
+              <Skeleton className="h-16 w-full" />
+              <Skeleton className="h-16 w-full" />
+            </>
+          )}
+          {!isLoading && list.length === 0 && (
+            <p className="py-6 text-center text-sm text-muted-foreground">
+              Your watchlist is empty. Add stocks to track them here.
+            </p>
+          )}
+          {list.map((symbol) => (
+            <WatchlistRow key={symbol} symbol={symbol} />
           ))}
         </div>
       </CardContent>
