@@ -17,6 +17,7 @@ import DashboardLayout from "@/layouts/DashboardLayout";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import AIInsights from "@/components/analysis/AIInsights";
+import AnalysisUnavailable from "@/components/analysis/AnalysisUnavailable";
 import NewsSentiment from "@/components/analysis/NewsSentiment";
 import StockOverview from "@/components/analysis/StockOverview";
 import {
@@ -28,6 +29,14 @@ import {
 } from "@/hooks/api";
 import { ApiError } from "@/lib/api/client";
 import { useAuth } from "@/lib/auth/auth-context";
+
+function isHistoryUnavailable(error: unknown): boolean {
+  if (!(error instanceof ApiError) || error.status !== 404) return false;
+  const body = error.body;
+  if (!body || typeof body !== "object") return false;
+  const details = (body as { details?: { reason?: string } }).details;
+  return details?.reason === "HISTORY_UNAVAILABLE";
+}
 
 const badgeClass: Record<string, string> = {
   buy: "bg-success/10 text-success border-success/20",
@@ -220,10 +229,18 @@ const StockAnalysis = () => {
                 modelVersion={analysis.model.version}
                 mode={analysis.model.mode}
               />
+            ) : analysisQuery.isError ? (
+              <AnalysisUnavailable
+                symbol={symbol}
+                historyUnavailable={isHistoryUnavailable(analysisQuery.error)}
+                message={
+                  analysisQuery.error instanceof ApiError
+                    ? analysisQuery.error.message
+                    : undefined
+                }
+              />
             ) : (
-              <div className="flex h-40 items-center justify-center rounded-lg border text-muted-foreground">
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Analysis unavailable
-              </div>
+              <AnalysisUnavailable symbol={symbol} />
             )}
           </div>
 
