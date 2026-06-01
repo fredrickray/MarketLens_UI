@@ -36,7 +36,7 @@ export default function SettingsPage() {
     "U";
 
   const prefsQuery = useQuery({
-    queryKey: ["preferences"],
+    queryKey: ["preferences", user?.id ?? "guest"],
     queryFn: () => preferencesApi.getUser(),
     enabled: !!user,
   });
@@ -54,8 +54,9 @@ export default function SettingsPage() {
   const updatePrefs = useMutation({
     mutationFn: (input: Partial<Preferences>) => preferencesApi.updateUser(input),
     onSuccess: (data) => {
-      qc.setQueryData(["preferences"], data);
-      toast.success("Preferences saved");
+      qc.setQueryData(["preferences", user?.id ?? "guest"], data);
+      void qc.invalidateQueries({ queryKey: ["stocks", "analysis"] });
+      toast.success("Preferences saved — new analyses will use them");
     },
     onError: () => toast.error("Could not save preferences"),
   });

@@ -2,13 +2,17 @@
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Brain, Sparkles, AlertTriangle } from "lucide-react";
-import type { AnalysisRecommendation } from "@/lib/api/types";
+import type { AnalysisRecommendation, RiskTolerance, TimeHorizon } from "@/lib/api/types";
 
 interface AIInsightsProps {
   recommendation: AnalysisRecommendation;
   featuresUsed?: string[];
   modelVersion?: string;
   mode?: string;
+  context?: {
+    time_horizon: TimeHorizon;
+    risk_tolerance: RiskTolerance;
+  };
 }
 
 const FEATURE_LABELS: Record<string, string> = {
@@ -30,6 +34,7 @@ const AIInsights = ({
   featuresUsed,
   modelVersion,
   mode,
+  context,
 }: AIInsightsProps) => {
   const confidencePct = Math.round(recommendation.confidence * 100);
 
@@ -49,6 +54,20 @@ const AIInsights = ({
             <span className="text-lg font-bold text-primary">{confidencePct}%</span>
           </div>
         </div>
+
+        {context && (
+          <p className="text-xs text-muted-foreground">
+            Using your{" "}
+            <span className="font-medium text-foreground">{context.time_horizon}-term</span>{" "}
+            outlook and{" "}
+            <span className="font-medium text-foreground">{context.risk_tolerance}</span>{" "}
+            risk preference
+            {" · "}
+            <a href="/dashboard/settings" className="underline underline-offset-2 hover:text-foreground">
+              Change in Settings
+            </a>
+          </p>
+        )}
 
         <p className="text-sm text-muted-foreground leading-relaxed">
           {recommendation.explanation}

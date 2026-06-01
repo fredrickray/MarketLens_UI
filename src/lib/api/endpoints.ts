@@ -7,6 +7,7 @@ import type {
   NewsFeed,
   Preferences,
   StockAnalysis,
+  StockHistorySeries,
   StockOverview,
   StockSearchResult,
   TimeHorizon,
@@ -64,6 +65,20 @@ export const authApi = {
 
   me: () => apiRequest<AuthUser>("/auth/me"),
 
+  forgotPassword: (email: string) =>
+    apiRequest<{ message: string }>("/auth/forgot-password", {
+      method: "POST",
+      body: { email },
+      auth: false,
+    }),
+
+  resetPassword: (input: { email: string; otp: string; newPassword: string }) =>
+    apiRequest<{ message: string }>("/auth/reset-password", {
+      method: "POST",
+      body: input,
+      auth: false,
+    }),
+
   mergeGuest: () =>
     apiRequest<{ merged: boolean }>("/auth/merge-guest", { method: "POST" }),
 };
@@ -79,6 +94,19 @@ export const preferencesApi = {
       method: "PATCH",
       body: input,
     }).then((r) => r.data),
+
+  getGuest: () =>
+    apiRequest<Wrapped<{ guestId: string; expiresAt: string; preferences: Preferences } | null>>(
+      "/guest/me",
+      { auth: false },
+    ).then((r) => r.data?.preferences ?? null),
+
+  updateGuest: (input: Partial<Preferences>) =>
+    apiRequest<Wrapped<{ preferences: Preferences }>>("/guest/preferences", {
+      method: "POST",
+      body: input,
+      auth: false,
+    }).then((r) => r.data.preferences),
 };
 
 export const guestApi = {
@@ -122,6 +150,15 @@ export const stocksApi = {
       query: params,
       auth: false,
     }).then((r) => r.data),
+
+  history: (symbol: string, days = 90) =>
+    apiRequest<{ data: StockHistorySeries }>(
+      `/stocks/${encodeURIComponent(symbol)}/history`,
+      {
+        query: { days },
+        auth: false,
+      },
+    ).then((r) => r.data),
 };
 
 // ---- Watchlist (user or guest) ------------------------------------------

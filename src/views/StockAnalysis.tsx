@@ -19,6 +19,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import AIInsights from "@/components/analysis/AIInsights";
 import AnalysisUnavailable from "@/components/analysis/AnalysisUnavailable";
 import NewsSentiment from "@/components/analysis/NewsSentiment";
+import PriceChart from "@/components/analysis/PriceChart";
 import StockOverview from "@/components/analysis/StockOverview";
 import {
   useStockAnalysis,
@@ -29,6 +30,12 @@ import {
 } from "@/hooks/api";
 import { ApiError } from "@/lib/api/client";
 import { useAuth } from "@/lib/auth/auth-context";
+
+function formatPrice(price: number, currency?: string): string {
+  if (currency === "NGN") return `₦${price.toFixed(2)}`;
+  if (currency && currency !== "USD") return `${currency} ${price.toFixed(2)}`;
+  return `$${price.toFixed(2)}`;
+}
 
 function isHistoryUnavailable(error: unknown): boolean {
   if (!(error instanceof ApiError) || error.status !== 404) return false;
@@ -188,7 +195,9 @@ const StockAnalysis = () => {
                 <Skeleton className="h-12 w-40" />
               ) : (
                 <>
-                  <p className="text-4xl font-bold font-mono">${quote.price.toFixed(2)}</p>
+                  <p className="text-4xl font-bold font-mono">
+                    {formatPrice(quote.price, quote.currency)}
+                  </p>
                   <div
                     className={`flex items-center justify-end gap-2 text-lg ${
                       isPositive ? "text-success" : "text-destructive"
@@ -217,6 +226,12 @@ const StockAnalysis = () => {
           <Skeleton className="mb-6 h-24 w-full" />
         )}
 
+        <div className="mb-6">
+          {symbol && (
+            <PriceChart symbol={symbol} currency={quote?.currency} />
+          )}
+        </div>
+
         {/* Main Content Grid */}
         <div className="grid gap-6 lg:grid-cols-2">
           <div>
@@ -228,6 +243,7 @@ const StockAnalysis = () => {
                 featuresUsed={analysis.model.features_used}
                 modelVersion={analysis.model.version}
                 mode={analysis.model.mode}
+                context={analysis.context}
               />
             ) : analysisQuery.isError ? (
               <AnalysisUnavailable

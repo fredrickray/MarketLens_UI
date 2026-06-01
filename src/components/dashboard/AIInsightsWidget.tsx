@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import Link from "next/link";
 import { stocksApi } from "@/lib/api/endpoints";
-import { useWatchlist } from "@/hooks/api";
+import { useAnalysisPreferences, useWatchlist } from "@/hooks/api";
 import type { RecommendationAction } from "@/lib/api/types";
 
 const FALLBACK = ["NVDA", "AAPL", "TSLA"];
@@ -28,13 +28,15 @@ const actionStyles: Record<
 
 export function AIInsightsWidget() {
   const { data: watchlist } = useWatchlist();
+  const { preferences, isLoading: prefsLoading } = useAnalysisPreferences();
   const symbols = (watchlist && watchlist.length > 0 ? watchlist : FALLBACK).slice(0, 3);
 
   const results = useQueries({
     queries: symbols.map((symbol) => ({
-      queryKey: ["stocks", "analysis", symbol, undefined],
-      queryFn: () => stocksApi.analysis(symbol),
+      queryKey: ["stocks", "analysis", symbol, preferences],
+      queryFn: () => stocksApi.analysis(symbol, preferences),
       staleTime: 60_000,
+      enabled: !prefsLoading,
     })),
   });
 

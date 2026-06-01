@@ -73,6 +73,10 @@ export interface StockAnalysis {
   symbol: string;
   recommendation: AnalysisRecommendation;
   overview: StockOverview;
+  context: {
+    time_horizon: TimeHorizon;
+    risk_tolerance: RiskTolerance;
+  };
   model: {
     version?: string;
     mode: string;
@@ -82,6 +86,14 @@ export interface StockAnalysis {
   };
   series: { dataPoints: number; from?: string; to?: string };
   cachedAt?: string;
+}
+
+export interface StockHistorySeries {
+  symbol: string;
+  prices: number[];
+  volume: number[];
+  timestamps: string[];
+  provider: string;
 }
 
 export interface NewsArticle {
