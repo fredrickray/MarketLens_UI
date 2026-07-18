@@ -18,11 +18,24 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { useTheme } from "next-themes";
+import { useAuth } from "@/lib/auth/auth-context";
+import { useAlerts } from "@/hooks/api";
 
 export function DashboardHeader() {
   const [searchQuery, setSearchQuery] = useState("");
   const router = useRouter();
   const { theme, setTheme } = useTheme();
+  const { user, logout } = useAuth();
+  const { data: alerts } = useAlerts();
+
+  const activeAlertCount = (alerts ?? []).filter((a) => a.isActive).length;
+  const fullName = user
+    ? `${user.firstName} ${user.lastName}`.trim() || user.email
+    : "Guest";
+  const initials = user
+    ? `${user.firstName?.[0] ?? ""}${user.lastName?.[0] ?? ""}`.toUpperCase() ||
+      user.email.slice(0, 2).toUpperCase()
+    : "G";
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
@@ -32,9 +45,14 @@ export function DashboardHeader() {
     }
   };
 
+  const handleLogout = async () => {
+    await logout();
+    router.push("/login");
+  };
+
   return (
     <header className="sticky top-0 z-40 flex h-16 items-center gap-4 border-b border-border bg-background/95 backdrop-blur px-4 md:px-6">
-      <SidebarTrigger className="md:hidden" />
+      <SidebarTrigger />
       
       <form onSubmit={handleSearch} className="flex-1 max-w-md">
         <div className="relative">
@@ -62,9 +80,11 @@ export function DashboardHeader() {
         <Button variant="ghost" size="icon" className="relative" asChild>
           <Link href="/dashboard/alerts">
             <Bell className="h-5 w-5" />
-            <Badge className="absolute -top-1 -right-1 h-5 w-5 rounded-full p-0 flex items-center justify-center text-xs">
-              3
-            </Badge>
+            {activeAlertCount > 0 && (
+              <Badge className="absolute -top-1 -right-1 h-5 w-5 rounded-full p-0 flex items-center justify-center text-xs">
+                {activeAlertCount}
+              </Badge>
+            )}
           </Link>
         </Button>
 
@@ -73,7 +93,7 @@ export function DashboardHeader() {
             <Button variant="ghost" size="icon" className="rounded-full">
               <Avatar className="h-8 w-8">
                 <AvatarFallback className="bg-primary text-primary-foreground">
-                  JD
+                  {initials}
                 </AvatarFallback>
               </Avatar>
             </Button>
@@ -81,8 +101,10 @@ export function DashboardHeader() {
           <DropdownMenuContent align="end" className="w-56 bg-popover">
             <DropdownMenuLabel>
               <div className="flex flex-col">
-                <span className="font-medium">John Doe</span>
-                <span className="text-sm text-muted-foreground">john@example.com</span>
+                <span className="font-medium">{fullName}</span>
+                {user && (
+                  <span className="text-sm text-muted-foreground">{user.email}</span>
+                )}
               </div>
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
@@ -93,10 +115,11 @@ export function DashboardHeader() {
               </Link>
             </DropdownMenuItem>
             <DropdownMenuSeparator />
-            <DropdownMenuItem asChild className="text-destructive focus:text-destructive">
-              <Link href="/login" className="cursor-pointer">
-                Log Out
-              </Link>
+            <DropdownMenuItem
+              className="text-destructive focus:text-destructive cursor-pointer"
+              onClick={handleLogout}
+            >
+              Log Out
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>

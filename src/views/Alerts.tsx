@@ -3,27 +3,29 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { 
-  Bell, 
-  Plus, 
-  Trash2, 
-  TrendingUp, 
-  TrendingDown, 
-  ArrowUpDown, 
-  Target,
-  Newspaper,
+import { toast } from "sonner";
+import {
+  Bell,
+  Plus,
+  Trash2,
+  TrendingUp,
+  TrendingDown,
+  ArrowUpDown,
   Brain,
   ToggleLeft,
   ToggleRight,
-  Search
+  Search,
+  Loader2,
+  Lock,
 } from "lucide-react";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   Select,
   SelectContent,
@@ -41,119 +43,126 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-
-type AlertType = "price_above" | "price_below" | "percent_change" | "recommendation_change" | "news_sentiment";
-
-interface Alert {
-  id: string;
-  symbol: string;
-  name: string;
-  type: AlertType;
-  value?: number;
-  enabled: boolean;
-  createdAt: string;
-}
+import { useAuth } from "@/lib/auth/auth-context";
+import {
+  useAlerts,
+  useCreateAlert,
+  useSetAlertActive,
+  useDeleteAlert,
+} from "@/hooks/api";
+import type { Alert, AlertType, CreateAlertInput } from "@/lib/api/types";
+import { ApiError } from "@/lib/api/client";
 
 const alertTypeLabels: Record<AlertType, string> = {
   price_above: "Price Above",
   price_below: "Price Below",
-  percent_change: "% Change",
+  price_change_percent: "% Change",
   recommendation_change: "Recommendation Change",
-  news_sentiment: "News Sentiment Alert",
 };
 
 const alertTypeIcons: Record<AlertType, React.ReactNode> = {
   price_above: <TrendingUp className="h-4 w-4" />,
   price_below: <TrendingDown className="h-4 w-4" />,
-  percent_change: <ArrowUpDown className="h-4 w-4" />,
+  price_change_percent: <ArrowUpDown className="h-4 w-4" />,
   recommendation_change: <Brain className="h-4 w-4" />,
-  news_sentiment: <Newspaper className="h-4 w-4" />,
 };
 
-const mockAlerts: Alert[] = [
-  { id: "1", symbol: "AAPL", name: "Apple Inc.", type: "price_above", value: 200, enabled: true, createdAt: "2024-01-15" },
-  { id: "2", symbol: "AAPL", name: "Apple Inc.", type: "price_below", value: 170, enabled: true, createdAt: "2024-01-15" },
-  { id: "3", symbol: "TSLA", name: "Tesla, Inc.", type: "percent_change", value: 5, enabled: false, createdAt: "2024-01-10" },
-  { id: "4", symbol: "NVDA", name: "NVIDIA Corporation", type: "recommendation_change", enabled: true, createdAt: "2024-01-08" },
-  { id: "5", symbol: "MSFT", name: "Microsoft Corporation", type: "news_sentiment", enabled: true, createdAt: "2024-01-05" },
-];
+function describeAlert(alert: Alert): string {
+  switch (alert.type) {
+    case "price_above":
+      return `Notify when price exceeds $${alert.targetPrice}`;
+    case "price_below":
+      return `Notify when price drops below $${alert.targetPrice}`;
+    case "price_change_percent":
+      return `Notify on ${alert.thresholdPercent}%+ daily change`;
+    case "recommendation_change":
+      return alert.targetAction
+        ? `Notify when AI recommendation becomes ${alert.targetAction}`
+        : "Notify when AI recommendation changes";
+    default:
+      return "";
+  }
+}
 
-const stocks = [
-  { symbol: "AAPL", name: "Apple Inc." },
-  { symbol: "NVDA", name: "NVIDIA Corporation" },
-  { symbol: "TSLA", name: "Tesla, Inc." },
-  { symbol: "MSFT", name: "Microsoft Corporation" },
-  { symbol: "META", name: "Meta Platforms, Inc." },
-  { symbol: "GOOGL", name: "Alphabet Inc." },
-];
+const needsPrice = (type: AlertType) =>
+  type === "price_above" || type === "price_below";
+const needsPercent = (type: AlertType) => type === "price_change_percent";
 
 const Alerts = () => {
   const searchParams = useSearchParams();
-  const preselectedSymbol = searchParams?.get("symbol") || "";
-  
-  const [alerts, setAlerts] = useState<Alert[]>(mockAlerts);
+  const preselectedSymbol = (searchParams?.get("symbol") || "").toUpperCase();
+  const { isAuthenticated, isLoading: authLoading } = useAuth();
+
+  const { data: alerts, isLoading } = useAlerts();
+  const createAlert = useCreateAlert();
+  const setActive = useSetAlertActive();
+  const deleteAlert = useDeleteAlert();
+
   const [searchQuery, setSearchQuery] = useState("");
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
-  const [newAlert, setNewAlert] = useState({
-    symbol: preselectedSymbol,
-    type: "price_above" as AlertType,
-    value: "",
-  });
+  const [newAlert, setNewAlert] = useState<{
+    symbol: string;
+    type: AlertType;
+    value: string;
+  }>({ symbol: preselectedSymbol, type: "price_above", value: "" });
 
-  const filteredAlerts = alerts.filter(
-    alert =>
-      alert.symbol.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      alert.name.toLowerCase().includes(searchQuery.toLowerCase())
+  const all = alerts ?? [];
+  const filtered = all.filter((a) =>
+    a.symbol.toLowerCase().includes(searchQuery.toLowerCase()),
   );
+  const activeAlerts = filtered.filter((a) => a.isActive);
+  const inactiveAlerts = filtered.filter((a) => !a.isActive);
 
-  const activeAlerts = filteredAlerts.filter(a => a.enabled);
-  const inactiveAlerts = filteredAlerts.filter(a => !a.enabled);
-
-  const handleToggleAlert = (id: string) => {
-    setAlerts(alerts.map(alert => 
-      alert.id === id ? { ...alert, enabled: !alert.enabled } : alert
-    ));
+  const handleToggle = async (alert: Alert) => {
+    try {
+      await setActive.mutateAsync({ id: alert.id, isActive: !alert.isActive });
+    } catch (error) {
+      toast.error(error instanceof ApiError ? error.message : "Could not update alert");
+    }
   };
 
-  const handleDeleteAlert = (id: string) => {
-    setAlerts(alerts.filter(alert => alert.id !== id));
+  const handleDelete = async (id: string) => {
+    try {
+      await deleteAlert.mutateAsync(id);
+      toast.success("Alert deleted");
+    } catch (error) {
+      toast.error(error instanceof ApiError ? error.message : "Could not delete alert");
+    }
   };
 
-  const handleCreateAlert = () => {
-    const stock = stocks.find(s => s.symbol === newAlert.symbol);
-    if (!stock) return;
+  const handleCreate = async () => {
+    const symbol = newAlert.symbol.trim().toUpperCase();
+    if (!symbol) return;
 
-    const alert: Alert = {
-      id: Date.now().toString(),
-      symbol: newAlert.symbol,
-      name: stock.name,
-      type: newAlert.type,
-      value: newAlert.value ? parseFloat(newAlert.value) : undefined,
-      enabled: true,
-      createdAt: new Date().toISOString().split("T")[0],
-    };
+    const input: CreateAlertInput = { symbol, type: newAlert.type };
+    if (needsPrice(newAlert.type)) input.targetPrice = parseFloat(newAlert.value);
+    if (needsPercent(newAlert.type)) input.thresholdPercent = parseFloat(newAlert.value);
 
-    setAlerts([alert, ...alerts]);
-    setCreateDialogOpen(false);
-    setNewAlert({ symbol: "", type: "price_above", value: "" });
+    try {
+      await createAlert.mutateAsync(input);
+      toast.success("Alert created");
+      setCreateDialogOpen(false);
+      setNewAlert({ symbol: "", type: "price_above", value: "" });
+    } catch (error) {
+      toast.error(error instanceof ApiError ? error.message : "Could not create alert");
+    }
   };
-
-  const needsValue = (type: AlertType) => 
-    ["price_above", "price_below", "percent_change"].includes(type);
 
   const AlertCard = ({ alert }: { alert: Alert }) => (
-    <Card className={`transition-opacity ${!alert.enabled ? "opacity-60" : ""}`}>
+    <Card className={`transition-opacity ${!alert.isActive ? "opacity-60" : ""}`}>
       <CardContent className="p-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-4">
-            <div className={`flex h-10 w-10 items-center justify-center rounded-lg ${
-              alert.enabled ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground"
-            }`}>
+            <div
+              className={`flex h-10 w-10 items-center justify-center rounded-lg ${
+                alert.isActive ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground"
+              }`}
+            >
               {alertTypeIcons[alert.type]}
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <Link 
+                <Link
                   href={`/stock/${alert.symbol}`}
                   className="font-semibold hover:text-primary transition-colors"
                 >
@@ -163,24 +172,20 @@ const Alerts = () => {
                   {alertTypeLabels[alert.type]}
                 </span>
               </div>
-              <p className="text-sm text-muted-foreground">
-                {alert.type === "price_above" && `Notify when price exceeds $${alert.value}`}
-                {alert.type === "price_below" && `Notify when price drops below $${alert.value}`}
-                {alert.type === "percent_change" && `Notify on ${alert.value}%+ daily change`}
-                {alert.type === "recommendation_change" && "Notify when AI recommendation changes"}
-                {alert.type === "news_sentiment" && "Notify on significant news sentiment shifts"}
-              </p>
+              <p className="text-sm text-muted-foreground">{describeAlert(alert)}</p>
             </div>
           </div>
           <div className="flex items-center gap-3">
             <Switch
-              checked={alert.enabled}
-              onCheckedChange={() => handleToggleAlert(alert.id)}
+              checked={alert.isActive}
+              onCheckedChange={() => handleToggle(alert)}
+              disabled={setActive.isPending}
             />
             <Button
               variant="ghost"
               size="icon"
-              onClick={() => handleDeleteAlert(alert.id)}
+              onClick={() => handleDelete(alert.id)}
+              disabled={deleteAlert.isPending}
               className="text-muted-foreground hover:text-destructive"
             >
               <Trash2 className="h-4 w-4" />
@@ -191,6 +196,29 @@ const Alerts = () => {
     </Card>
   );
 
+  if (!authLoading && !isAuthenticated) {
+    return (
+      <div className="min-h-screen bg-background">
+        <Header />
+        <main className="container mx-auto px-4 py-20">
+          <Card className="mx-auto max-w-md py-12">
+            <CardContent className="flex flex-col items-center justify-center text-center">
+              <Lock className="mb-4 h-12 w-12 text-muted-foreground" />
+              <h3 className="text-xl font-semibold mb-2">Sign in to manage alerts</h3>
+              <p className="text-muted-foreground mb-6">
+                Price and recommendation alerts are tied to your account.
+              </p>
+              <Button asChild>
+                <Link href="/login">Sign In</Link>
+              </Button>
+            </CardContent>
+          </Card>
+        </main>
+        <Footer />
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-background">
       <Header />
@@ -198,11 +226,10 @@ const Alerts = () => {
         <div className="mb-8">
           <h1 className="text-3xl font-bold mb-2">Price Alerts</h1>
           <p className="text-muted-foreground">
-            Get notified about price changes, AI recommendations, and market news
+            Get notified about price changes and AI recommendation shifts
           </p>
         </div>
 
-        {/* Actions Bar */}
         <div className="flex flex-col gap-4 mb-6 sm:flex-row sm:items-center sm:justify-between">
           <div className="relative flex-1 max-w-sm">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -213,7 +240,7 @@ const Alerts = () => {
               className="pl-10"
             />
           </div>
-          
+
           <Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>
             <DialogTrigger asChild>
               <Button>
@@ -224,82 +251,46 @@ const Alerts = () => {
             <DialogContent>
               <DialogHeader>
                 <DialogTitle>Create New Alert</DialogTitle>
-                <DialogDescription>
-                  Set up a new price or event alert for a stock
-                </DialogDescription>
+                <DialogDescription>Set up a new price or event alert for a stock</DialogDescription>
               </DialogHeader>
               <div className="space-y-4 py-4">
                 <div className="space-y-2">
-                  <Label>Stock</Label>
-                  <Select 
-                    value={newAlert.symbol} 
-                    onValueChange={(value) => setNewAlert({ ...newAlert, symbol: value })}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select a stock" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {stocks.map(stock => (
-                        <SelectItem key={stock.symbol} value={stock.symbol}>
-                          {stock.symbol} - {stock.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <Label>Stock symbol</Label>
+                  <Input
+                    placeholder="e.g., AAPL"
+                    value={newAlert.symbol}
+                    onChange={(e) =>
+                      setNewAlert({ ...newAlert, symbol: e.target.value.toUpperCase() })
+                    }
+                  />
                 </div>
 
                 <div className="space-y-2">
                   <Label>Alert Type</Label>
-                  <Select 
-                    value={newAlert.type} 
-                    onValueChange={(value: AlertType) => setNewAlert({ ...newAlert, type: value })}
+                  <Select
+                    value={newAlert.type}
+                    onValueChange={(value: AlertType) =>
+                      setNewAlert({ ...newAlert, type: value })
+                    }
                   >
                     <SelectTrigger>
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="price_above">
-                        <div className="flex items-center gap-2">
-                          <TrendingUp className="h-4 w-4" />
-                          Price Above
-                        </div>
-                      </SelectItem>
-                      <SelectItem value="price_below">
-                        <div className="flex items-center gap-2">
-                          <TrendingDown className="h-4 w-4" />
-                          Price Below
-                        </div>
-                      </SelectItem>
-                      <SelectItem value="percent_change">
-                        <div className="flex items-center gap-2">
-                          <ArrowUpDown className="h-4 w-4" />
-                          Percent Change
-                        </div>
-                      </SelectItem>
-                      <SelectItem value="recommendation_change">
-                        <div className="flex items-center gap-2">
-                          <Brain className="h-4 w-4" />
-                          Recommendation Change
-                        </div>
-                      </SelectItem>
-                      <SelectItem value="news_sentiment">
-                        <div className="flex items-center gap-2">
-                          <Newspaper className="h-4 w-4" />
-                          News Sentiment
-                        </div>
-                      </SelectItem>
+                      <SelectItem value="price_above">Price Above</SelectItem>
+                      <SelectItem value="price_below">Price Below</SelectItem>
+                      <SelectItem value="price_change_percent">Percent Change</SelectItem>
+                      <SelectItem value="recommendation_change">Recommendation Change</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
 
-                {needsValue(newAlert.type) && (
+                {(needsPrice(newAlert.type) || needsPercent(newAlert.type)) && (
                   <div className="space-y-2">
-                    <Label>
-                      {newAlert.type === "percent_change" ? "Percentage (%)" : "Price ($)"}
-                    </Label>
+                    <Label>{needsPercent(newAlert.type) ? "Percentage (%)" : "Price ($)"}</Label>
                     <Input
                       type="number"
-                      placeholder={newAlert.type === "percent_change" ? "e.g., 5" : "e.g., 200"}
+                      placeholder={needsPercent(newAlert.type) ? "e.g., 5" : "e.g., 200"}
                       value={newAlert.value}
                       onChange={(e) => setNewAlert({ ...newAlert, value: e.target.value })}
                     />
@@ -310,18 +301,25 @@ const Alerts = () => {
                 <Button variant="outline" onClick={() => setCreateDialogOpen(false)}>
                   Cancel
                 </Button>
-                <Button 
-                  onClick={handleCreateAlert}
-                  disabled={!newAlert.symbol || (needsValue(newAlert.type) && !newAlert.value)}
+                <Button
+                  onClick={handleCreate}
+                  disabled={
+                    createAlert.isPending ||
+                    !newAlert.symbol ||
+                    ((needsPrice(newAlert.type) || needsPercent(newAlert.type)) && !newAlert.value)
+                  }
                 >
-                  Create Alert
+                  {createAlert.isPending ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    "Create Alert"
+                  )}
                 </Button>
               </DialogFooter>
             </DialogContent>
           </Dialog>
         </div>
 
-        {/* Stats */}
         <div className="grid gap-4 md:grid-cols-3 mb-8">
           <Card>
             <CardContent className="p-6">
@@ -330,7 +328,7 @@ const Alerts = () => {
                   <Bell className="h-6 w-6 text-primary" />
                 </div>
                 <div>
-                  <p className="text-2xl font-bold">{alerts.length}</p>
+                  <p className="text-2xl font-bold">{all.length}</p>
                   <p className="text-sm text-muted-foreground">Total Alerts</p>
                 </div>
               </div>
@@ -364,76 +362,70 @@ const Alerts = () => {
           </Card>
         </div>
 
-        {/* Alerts List */}
-        <Tabs defaultValue="active" className="space-y-4">
-          <TabsList>
-            <TabsTrigger value="active">Active ({activeAlerts.length})</TabsTrigger>
-            <TabsTrigger value="paused">Paused ({inactiveAlerts.length})</TabsTrigger>
-            <TabsTrigger value="all">All ({filteredAlerts.length})</TabsTrigger>
-          </TabsList>
+        {isLoading ? (
+          <div className="space-y-3">
+            <Skeleton className="h-20 w-full" />
+            <Skeleton className="h-20 w-full" />
+          </div>
+        ) : (
+          <Tabs defaultValue="active" className="space-y-4">
+            <TabsList>
+              <TabsTrigger value="active">Active ({activeAlerts.length})</TabsTrigger>
+              <TabsTrigger value="paused">Paused ({inactiveAlerts.length})</TabsTrigger>
+              <TabsTrigger value="all">All ({filtered.length})</TabsTrigger>
+            </TabsList>
 
-          <TabsContent value="active" className="space-y-3">
-            {activeAlerts.length > 0 ? (
-              activeAlerts.map(alert => <AlertCard key={alert.id} alert={alert} />)
-            ) : (
-              <Card className="py-12">
-                <CardContent className="flex flex-col items-center justify-center text-center">
-                  <Bell className="mb-4 h-12 w-12 text-muted-foreground" />
-                  <h3 className="text-lg font-semibold mb-2">No active alerts</h3>
-                  <p className="text-muted-foreground mb-4">
-                    Create an alert to get notified about price changes
-                  </p>
-                  <Button onClick={() => setCreateDialogOpen(true)}>
-                    <Plus className="mr-2 h-4 w-4" />
-                    Create Alert
-                  </Button>
-                </CardContent>
-              </Card>
-            )}
-          </TabsContent>
+            <TabsContent value="active" className="space-y-3">
+              {activeAlerts.length > 0 ? (
+                activeAlerts.map((alert) => <AlertCard key={alert.id} alert={alert} />)
+              ) : (
+                <EmptyState onCreate={() => setCreateDialogOpen(true)} />
+              )}
+            </TabsContent>
 
-          <TabsContent value="paused" className="space-y-3">
-            {inactiveAlerts.length > 0 ? (
-              inactiveAlerts.map(alert => <AlertCard key={alert.id} alert={alert} />)
-            ) : (
-              <Card className="py-12">
-                <CardContent className="flex flex-col items-center justify-center text-center">
-                  <ToggleLeft className="mb-4 h-12 w-12 text-muted-foreground" />
-                  <h3 className="text-lg font-semibold mb-2">No paused alerts</h3>
-                  <p className="text-muted-foreground">
-                    All your alerts are currently active
-                  </p>
-                </CardContent>
-              </Card>
-            )}
-          </TabsContent>
+            <TabsContent value="paused" className="space-y-3">
+              {inactiveAlerts.length > 0 ? (
+                inactiveAlerts.map((alert) => <AlertCard key={alert.id} alert={alert} />)
+              ) : (
+                <Card className="py-12">
+                  <CardContent className="flex flex-col items-center justify-center text-center">
+                    <ToggleLeft className="mb-4 h-12 w-12 text-muted-foreground" />
+                    <h3 className="text-lg font-semibold mb-2">No paused alerts</h3>
+                    <p className="text-muted-foreground">All your alerts are currently active</p>
+                  </CardContent>
+                </Card>
+              )}
+            </TabsContent>
 
-          <TabsContent value="all" className="space-y-3">
-            {filteredAlerts.length > 0 ? (
-              filteredAlerts.map(alert => <AlertCard key={alert.id} alert={alert} />)
-            ) : (
-              <Card className="py-12">
-                <CardContent className="flex flex-col items-center justify-center text-center">
-                  <Bell className="mb-4 h-12 w-12 text-muted-foreground" />
-                  <h3 className="text-lg font-semibold mb-2">No alerts found</h3>
-                  <p className="text-muted-foreground mb-4">
-                    {searchQuery ? "Try a different search term" : "Create your first alert"}
-                  </p>
-                  {!searchQuery && (
-                    <Button onClick={() => setCreateDialogOpen(true)}>
-                      <Plus className="mr-2 h-4 w-4" />
-                      Create Alert
-                    </Button>
-                  )}
-                </CardContent>
-              </Card>
-            )}
-          </TabsContent>
-        </Tabs>
+            <TabsContent value="all" className="space-y-3">
+              {filtered.length > 0 ? (
+                filtered.map((alert) => <AlertCard key={alert.id} alert={alert} />)
+              ) : (
+                <EmptyState onCreate={() => setCreateDialogOpen(true)} />
+              )}
+            </TabsContent>
+          </Tabs>
+        )}
       </main>
       <Footer />
     </div>
   );
 };
+
+const EmptyState = ({ onCreate }: { onCreate: () => void }) => (
+  <Card className="py-12">
+    <CardContent className="flex flex-col items-center justify-center text-center">
+      <Bell className="mb-4 h-12 w-12 text-muted-foreground" />
+      <h3 className="text-lg font-semibold mb-2">No alerts yet</h3>
+      <p className="text-muted-foreground mb-4">
+        Create an alert to get notified about price changes
+      </p>
+      <Button onClick={onCreate}>
+        <Plus className="mr-2 h-4 w-4" />
+        Create Alert
+      </Button>
+    </CardContent>
+  </Card>
+);
 
 export default Alerts;
