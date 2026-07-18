@@ -10,7 +10,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useRouter } from "next/navigation";
 import { useQueries } from "@tanstack/react-query";
 import { stocksApi } from "@/lib/api/endpoints";
-import { useWatchlist } from "@/hooks/api";
+import { useAnalysisPreferences, useWatchlist } from "@/hooks/api";
 import type { RecommendationAction, StockAnalysis } from "@/lib/api/types";
 
 const POPULAR = ["AAPL", "NVDA", "TSLA", "MSFT", "META", "GOOGL", "AMZN", "AMD"];
@@ -32,14 +32,16 @@ export default function AnalysisPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const router = useRouter();
   const { data: watchlist } = useWatchlist();
+  const { preferences, isLoading: prefsLoading } = useAnalysisPreferences();
 
   const symbols = (watchlist && watchlist.length > 0 ? watchlist : POPULAR.slice(0, 4)).slice(0, 6);
 
   const results = useQueries({
     queries: symbols.map((symbol) => ({
-      queryKey: ["stocks", "analysis", symbol, undefined],
-      queryFn: () => stocksApi.analysis(symbol),
+      queryKey: ["stocks", "analysis", symbol, preferences],
+      queryFn: () => stocksApi.analysis(symbol, preferences),
       staleTime: 60_000,
+      enabled: !prefsLoading,
     })),
   });
 
